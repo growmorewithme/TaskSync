@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@clerk/nextjs";
 import { ACTION, ENTITY_TYPE } from "@prisma/client";
+import { auth } from "@clerk/nextjs";
 
-import { CopyCard } from "./schema";
+import { CreateCard } from "./schema";
 import { InputType, ReturnType } from "./types";
 import { db } from "@/lib/db";
 import { createSafeAction } from "@/lib/create-safe-action";
@@ -19,32 +19,28 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     };
   }
 
-  const { id, boardId } = data;
+  const { title, boardId, listId } = data;
 
   let card;
 
   try {
-    const cardToCopy = await db.card.findUnique({
+    const list = await db.list.findUnique({
       where: {
-        id,
-        list: {
-          board: {
-            orgId,
-          },
+        id: listId,
+        board: {
+          orgId,
         },
       },
     });
 
-    if (!cardToCopy) {
+    if (!list) {
       return {
-        error: "Card not found.",
+        error: "List not found.",
       };
     }
 
     const lastCard = await db.card.findFirst({
-      where: {
-        listId: cardToCopy.listId,
-      },
+      where: { listId },
       orderBy: { order: "desc" },
       select: { order: true },
     });
@@ -53,10 +49,9 @@ const handler = async (data: InputType): Promise<ReturnType> => {
 
     card = await db.card.create({
       data: {
-        title: `${cardToCopy.title} — Copy`,
-        description: cardToCopy.description,
+        title,
+        listId,
         order: newOrder,
-        listId: cardToCopy.listId,
       },
     });
 
@@ -69,13 +64,15 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     });
   } catch (error) {
     return {
-      error: "Failed to copy.",
+      error: "Failed to create.",
     };
   }
 
   revalidatePath(`/board/${boardId}`);
 
-  return { data: card };
+  return {
+    data: card,
+  };
 };
 
-export const copyCard = createSafeAction(CopyCard, handler);
+export const createCard = createSafeAction(CreateCard, handler);

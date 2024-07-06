@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@clerk/nextjs";
 import { ACTION, ENTITY_TYPE } from "@prisma/client";
 
-import { CopyCard } from "./schema";
+import { UpdateCard } from "./schema";
 import { InputType, ReturnType } from "./types";
 import { db } from "@/lib/db";
 import { createSafeAction } from "@/lib/create-safe-action";
@@ -19,12 +19,12 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     };
   }
 
-  const { id, boardId } = data;
+  const { id, boardId, ...values } = data;
 
   let card;
 
   try {
-    const cardToCopy = await db.card.findUnique({
+    card = await db.card.update({
       where: {
         id,
         list: {
@@ -33,30 +33,8 @@ const handler = async (data: InputType): Promise<ReturnType> => {
           },
         },
       },
-    });
-
-    if (!cardToCopy) {
-      return {
-        error: "Card not found.",
-      };
-    }
-
-    const lastCard = await db.card.findFirst({
-      where: {
-        listId: cardToCopy.listId,
-      },
-      orderBy: { order: "desc" },
-      select: { order: true },
-    });
-
-    const newOrder = lastCard ? lastCard.order + 1 : 1;
-
-    card = await db.card.create({
       data: {
-        title: `${cardToCopy.title} — Copy`,
-        description: cardToCopy.description,
-        order: newOrder,
-        listId: cardToCopy.listId,
+        ...values,
       },
     });
 
@@ -65,17 +43,18 @@ const handler = async (data: InputType): Promise<ReturnType> => {
       entityId: card.id,
       entityTitle: card.title,
       entityType: ENTITY_TYPE.CARD,
-      action: ACTION.CREATE,
+      action: ACTION.UPDATE,
     });
   } catch (error) {
     return {
-      error: "Failed to copy.",
+      error: "Failed to update.",
     };
   }
 
   revalidatePath(`/board/${boardId}`);
-
-  return { data: card };
+  return {
+    data: card,
+  };
 };
 
-export const copyCard = createSafeAction(CopyCard, handler);
+export const updateCard = createSafeAction(UpdateCard, handler);
